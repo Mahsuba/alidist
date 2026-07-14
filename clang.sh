@@ -15,7 +15,7 @@ env:
 prefer_system: (osx.*)
 prefer_system_check: |
   # Must be kept in sync with the arrow.sh check for clang!
-  brew --prefix --installed llvm@20 > /dev/null 2>&1
+  brew --prefix llvm@20 && test -d $(brew --prefix llvm@20)
 ---
 #!/bin/bash -e
 
@@ -35,6 +35,7 @@ case $ARCHITECTURE in
   *_x86-64) LLVM_TARGETS_TO_BUILD=X86 ;;
   *_arm64) LLVM_TARGETS_TO_BUILD=AArch64 ;;
   *_aarch64) LLVM_TARGETS_TO_BUILD=AArch64 ;;
+  *_riscv64) LLVM_TARGETS_TO_BUILD=RISCV ;;
   *) echo 'Unknown LLVM target for architecture' >&2; exit 1 ;;
 esac
 
@@ -55,8 +56,8 @@ cmake "$SOURCEDIR/llvm" \
   -DLLVM_BUILD_LLVM_DYLIB=ON \
   -DLLVM_ENABLE_RTTI=ON \
   -DBUILD_SHARED_LIBS=OFF \
-  -DLIBCXXABI_USE_LLVM_UNWINDER=OFF
-
+  -DLIBCXXABI_USE_LLVM_UNWINDER=OFF 
+  
 cmake --build . -- ${JOBS:+-j$JOBS} install
 
 if [[ $PKGVERSION == v18.1.* ]]; then

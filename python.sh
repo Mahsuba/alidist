@@ -1,6 +1,6 @@
 package: Python
 version: "%(tag_basename)s"
-tag: v3.10.19
+tag: v3.13.12
 source: https://github.com/python/cpython
 license: PSF License Version 2
 requires:
