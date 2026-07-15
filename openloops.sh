@@ -21,8 +21,20 @@ sed -i -e 's/max_string_length\ =\ 255/max_string_length\ =\ 1000/g' pyol/config
 # Make scons script work with python3 
 sed -i -e 's/#!\ \/usr\/bin\/env\ python$/#!\ \/usr\/bin\/env\ python3/g' scons-local/scons.py
 
-# fix the mcmodel argument to gfortran (medium is not universal and does not exist on AARCH64 version)
-sed -i -e 's/cmodel = medium/cmodel = small/' ./pyol/config/default.cfg
+# fix the mcmodel argument to gfortran (medium is not universal, and the
+# valid replacement differs by architecture: small works on x86_64/aarch64,
+# but riscv64's gfortran only supports large/medany/medlow -- medany is the
+# standard choice for RISC-V 64-bit Linux)
+case $ARCHITECTURE in
+  *_riscv64) CMODEL_VALUE=medany ;;
+  *) CMODEL_VALUE=small ;;
+esac
+sed -i -e "s/cmodel = medium/cmodel = $CMODEL_VALUE/" ./pyol/config/default.cfg
+
+# riscv64's medany/medlow values are not in OLBaseConfig.py's whitelist
+# (only small/medium/large were ever anticipated) -- add them so scons'
+# own config validator doesn't reject a value gfortran actually needs
+sed -i -e "s/one_of=\['', 'small','medium','large'\]/one_of=['', 'small','medium','large','medany','medlow']/" pyol/tools/OLBaseConfig.py
 
 ./scons
 
