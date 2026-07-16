@@ -1,14 +1,19 @@
 package: madgraph
 version: "%(tag_basename)s"
-tag: "v3.5.2"
-source: https://github.com/alisw/MadGraph
+tag: "v3.5.13"
+source: https://github.com/mg5amcnlo/mg5amcnlo
 requires:
   - Python-modules
   - curl
   - zlib
+  - fastjet
+  - lhapdf
+  - pythia
+  - ninja
 license: GPL-3.0
 build_requires:
   - alibuild-recipe-tools
+  - zlib
 ---
 #!/bin/bash -e
 
@@ -16,71 +21,75 @@ rsync -a --no-specials --no-devices  --chmod=ug=rwX --exclude '**/.git' --delete
 
 # install internal packages 
 cd "$BUILDDIR"
-
-# hack to work around OneLoop install crashing when attempting to delete a file that no longer exists
-mkdir -p /home/max/sw/BUILD/madgraph-latest/madgraph/HEPTools/oneloop//../lib
-touch /home/max/sw/BUILD/madgraph-latest/madgraph/HEPTools/oneloop//../lib/libavh_olo.a
-
-#mkdir -p /home/max/sw/BUILD/madgraph-latest/madgraph/HEPTools/ninja/Ninja
-#cp /usr/share/misc/config.guess /home/max/sw/BUILD/madgraph-latest/madgraph/HEPTools/ninja/Ninja/
-
 cat << EOF >> install.dat
+set lhapdf $LHAPDF_ROOT/bin/lhapdf-config
+set fastjet $FASTJET_ROOT/bin/fastjet-config
+set pythia8_path $PYTHIA_ROOT
 install oneloop
 install ninja
 install collier
 install RunningCoupling
 install QCDLoop
-install MadAnalysis5 --with_zlib=$ZLIB_ROOT
+install MadAnalysis5 --with_zlib=$ZLIB_ROOT --with_fastjet=$FASTJET/lib
+install mg5amc_py8_interface
 EOF
 
-
+# MadGraph uses wget for non macOSx systems, but this might not be available.
+# This is a workaround using curl (similar procedure in SHERPA)
+if ! (command -v wget > /dev/null); then
     echo "wget not found, using curl"
     mkdir -p tmpwget
-    cat > tmpwget/wget << 'EOF'
+    cat > tmpwget/wget << EOF
 #!/bin/sh
 outfile=""
 url=""
-for arg in "$@"; do
-  case "$arg" in
+for arg in "\$@"; do
+  case "\$arg" in
     --output-document=*)
-      outfile="${arg#--output-document=}"
+      outfile="\${arg#--output-document=}"
       ;;
     -*)
       ;;
     *)
-      url="$arg"
+      url="\$arg"
       ;;
   esac
 done
-
-# Special case: if URL contains "ninja"
-if echo "$url" | grep -q "ninja"; then
-  if [ -z "$outfile" ]; then
-    outfile="$(basename "$url")"
-  fi
-  cp /tmp/ninja.tar.gz "$outfile"
-  exit $?
-fi
-
-# Default behavior
-if [ -z "$outfile" ]; then
-  exec curl -fLO "$url"
+if [ -z "\$outfile" ]; then
+  exec curl -fLO "\$url"
 else
-  exec curl -fL "$url" -o "$outfile"
+  exec curl -fL "\$url" -o "\$outfile"
 fi
 EOF
     chmod +x tmpwget/wget
     export PATH="$PWD/tmpwget:$PATH"
+fi
 
+# FastJet was built with CGAL support; MA5 links against -lCGAL and -lgmp but
+# only passes -L$FASTJET/lib. This ensures the linker can find CGAL and GMP.
+export LIBRARY_PATH="${CGAL_ROOT:+$CGAL_ROOT/lib:}${GMP_ROOT:+$GMP_ROOT/lib:}${LIBRARY_PATH:-}"
+
+# Several bundled HEPTools sub-installers (Ninja, and likely
+# RunningCoupling/QCDLoop/OneLoop/Collier too -- all old, similarly-era
+# autotools-based physics libraries) ship ancient config.guess scripts that
+# predate riscv64 and fail with "unable to guess system type". These
+# installer scripts don't exist yet in a fresh checkout -- MadGraph creates
+# them dynamically while processing install.dat -- so patching any specific
+# file beforehand doesn't work (there's nothing there yet to patch).
+# Instead, export ac_cv_build directly: every standard autoconf-generated
+# configure script checks this cached value BEFORE ever invoking
+# config.guess, and being exported, it's inherited by every subprocess
+# MG5 spawns for the rest of this install, fixing this class of issue for
+# all of them at once rather than one at a time.
+case $ARCHITECTURE in
+  *_riscv64) export ac_cv_build="riscv64-unknown-linux-gnu" ;;
+esac
 
 ./bin/mg5_aMC install.dat
 
 # cleanup after build
 rm install.dat
-rm HEPTools/ninja/ninja_install.log 
-rm HEPTools/oneloop/oneloop_install.log
-rm HEPTools/collier/collier_install.log
-rm HEPTools/madanalysis5/madanalysis5_install.log
+find HEPTools -name "*.log" -delete
 rm -rf HEPTools/ninja/Ninja 
 rm -rf HEPTools/oneloop/OneLOop*
 rm -rf HEPTools/collier/COLLIER*
