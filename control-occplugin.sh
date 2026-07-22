@@ -1,6 +1,6 @@
 package: Control-OCCPlugin
 version: "%(tag_basename)s"
-tag: "v1.50.0"
+tag: "v1.49.0"
 requires:
   - FairMQ
   - FairLogger
@@ -32,6 +32,16 @@ case $ARCHITECTURE in
       [[ ! $OPENSSL_ROOT ]] && OPENSSL_ROOT_DIR=$(brew --prefix openssl@3)
       SONAME=dylib
     ;;
+    *_riscv64)
+      # riscv64 has no native hardware instruction for 128-bit atomic
+      # operations, so the compiler emits calls to __atomic_load_16 /
+      # __atomic_store_16 / __atomic_compare_exchange_16, which live in
+      # libatomic -- a small GCC support library the linker doesn't pull
+      # in automatically. Link it explicitly for both the shared library
+      # (libOcc.so, which contains these references) and the example
+      # executable that links against it.
+      ATOMIC_LINK_FLAGS="-latomic"
+    ;;
 esac
 
 cmake $SOURCEDIR/occ                                                                     \
@@ -46,6 +56,8 @@ cmake $SOURCEDIR/occ                                                            
       -DFAIRLOGGERPATH=${FAIRLOGGER_ROOT}                                                \
       ${RAPIDJSON_ROOT:+-DRapidJSON_ROOT=${RAPIDJSON_ROOT}}                              \
       -DConfiguration_ROOT=$CONFIGURATION_ROOT                                           \
+      ${ATOMIC_LINK_FLAGS:+-DCMAKE_EXE_LINKER_FLAGS=$ATOMIC_LINK_FLAGS}          \
+      ${ATOMIC_LINK_FLAGS:+-DCMAKE_SHARED_LINKER_FLAGS=$ATOMIC_LINK_FLAGS}       \
       -DBUILD_SHARED_LIBS=ON
 
 make ${JOBS+-j $JOBS} prefix=$INSTALLROOT
