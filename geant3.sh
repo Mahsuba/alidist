@@ -16,6 +16,19 @@ prepend_path:
   ROOT_INCLUDE_PATH: "$GEANT3_ROOT/include/TGeant3"
 ---
 #!/bin/bash -e
+
+# added/dummies.c enables x86-only FPU exception trapping (via glibc's
+# fpu_control.h _FPU_MASK_* macros, tied to the old x87 FPU control
+# register format). It already excludes __ia64 and __aarch64__ for the
+# same reason -- riscv64 has no equivalent mechanism either, so extend
+# the same exclusion. This is a debug-only feature (trapping NaN/overflow
+# during physics calculations), not something affecting simulation
+# correctness -- already known-safe to skip on other architectures.
+DUMMIES_C="$SOURCEDIR/added/dummies.c"
+if [[ -f "$DUMMIES_C" ]]; then
+  sed -i -e 's/!defined(__aarch64__))/!defined(__aarch64__) \&\& !defined(__riscv))/' "$DUMMIES_C"
+fi
+
 FVERSION=`gfortran --version | grep -i fortran | sed -e 's/.* //' | cut -d. -f1`
 SPECIALFFLAGS=""
 if [ $FVERSION -ge 10 ]; then
