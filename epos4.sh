@@ -18,6 +18,17 @@ export CXX=g++
 export FC=gfortran
 export COP=BASIC
 
+# EPOS4's CMakeLists only enables its compile flags (including -cpp, needed
+# to process #include in the Fortran sources) on x86_64/aarch64; on other
+# arches the flags are silently skipped and compilation fails with missing
+# parameters (kollmx etc). Add riscv64 to all three arch guards, and use
+# -mcmodel=medany instead of -mcmodel=large (not supported by riscv64 gcc).
+if [[ $ARCHITECTURE == *riscv64* ]]; then
+  sed -i -e 's/MATCHES "x86_64|aarch64"/MATCHES "x86_64|aarch64|riscv64"/g' \
+         -e 's/-mcmodel=large/-mcmodel=medany/g' \
+         ${SOURCEDIR}/CMakeLists.txt
+fi
+
 export LIBRARY_PATH="$LD_LIBRARY_PATH"
 cmake -S ${SOURCEDIR} -DCMAKE_INSTALL_PREFIX=${INSTALLROOT} \
           -DCOMPILE_OPTION=${COP} -DCMAKE_BUILD_TYPE=Release \
