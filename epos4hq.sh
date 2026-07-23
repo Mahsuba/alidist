@@ -1,6 +1,6 @@
 package: EPOS4HQ
 version: "%(tag_basename)s"
-tag: "v1.0hq-alice6"
+tag: "v1.0hq-alice5"
 source: https://github.com/alisw/EPOS4.git
 requires:
   - ROOT
@@ -17,6 +17,17 @@ export CC=gcc
 export CXX=g++
 export FC=gfortran
 export COP=HQ
+
+# Same issue as EPOS4: CMakeLists only enables compile flags (incl. -cpp,
+# needed to process #include in Fortran sources) on x86_64/aarch64; on
+# riscv64 they're silently skipped and parameters like kollmx are never
+# defined. Add riscv64 to the arch guards and use -mcmodel=medany instead
+# of -mcmodel=large (not supported by riscv64 gcc).
+if [[ $ARCHITECTURE == *riscv64* ]]; then
+  sed -i -e 's/MATCHES "x86_64|aarch64"/MATCHES "x86_64|aarch64|riscv64"/g' \
+         -e 's/-mcmodel=large/-mcmodel=medany/g' \
+         ${SOURCEDIR}/CMakeLists.txt
+fi
 
 export LIBRARY_PATH="$LD_LIBRARY_PATH"
 cmake -S ${SOURCEDIR} -DCMAKE_INSTALL_PREFIX=${INSTALLROOT} \
